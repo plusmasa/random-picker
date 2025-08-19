@@ -319,6 +319,26 @@
         }
   function wait(ms){ return new Promise(res => setTimeout(res, ms)); }
 
+        // ---------- Audio (Rattle) ----------
+        let rattleAudio = null;
+        function getRattle(){
+          if(!rattleAudio){
+            rattleAudio = new Audio('Sounds/rattle.mp3');
+            rattleAudio.preload = 'auto';
+            rattleAudio.volume = 1.0;
+          }
+          return rattleAudio;
+        }
+        function playRattle(){
+          try{
+            const a = getRattle();
+            // Restart if already playing for crisp feedback on repeated clicks
+            if(!a.paused){ a.currentTime = 0; }
+            const p = a.play();
+            if(p && typeof p.catch === 'function') p.catch(()=>{});
+          }catch(_){ /* ignore audio errors */ }
+        }
+
         // ---------- Placeholder avatars ----------
         function pastel(i){
           const palette = ['#9bafff','#6fffd2','#ffb3c1','#ffd166','#a3f7ff','#c7f36b','#ff9cee','#b9f','#f6d365','#fda085'];
@@ -696,8 +716,8 @@
           app.avatarPool = AVATAR_FILES.slice(); app.avatarCache = new Map(); renderSelectedList();
           regenerate(true); setStatus('Cleared names');
         });
-        btnShake.addEventListener('click', shake);
-        btnPick.addEventListener('click', pickNext);
+  btnShake.addEventListener('click', () => { playRattle(); shake(); });
+  btnPick.addEventListener('click', () => { playRattle(); pickNext(); });
         btnReset.addEventListener('click', resetAll);
         btnContinue.addEventListener('click', continueAfterPick);
         btnUndo.addEventListener('click', undoLast);
