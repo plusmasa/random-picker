@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# VS Code
+.vscode/
+
+# Playwright MCP
+.playwright-mcp/
+
+# Node/npm (just in case)
+node_modules/
+
+# Python venvs (if used for quick servers)
+.venv/
+.env/

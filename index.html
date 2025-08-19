@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Random Picker — Bowl Mode</title>
+    <meta name="description" content="Fun single-file random picker with physics (Matter.js)." />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <style>
+      :root{
+        /* Light beige mode */
+        --bg:#FAF3ED;           /* neutral background */
+        --panel:#FFFFFF;         /* primary surface */
+        --panel-2:#FFF7F1;       /* tinted surface */
+        --text:#2E2A27;          /* calm dark text */
+        --muted:#7A746E;         /* muted warm gray */
+        --accent:#6DA67A;        /* sage green */
+        --accent-2:#86BBD8;      /* soft blue */
+        --danger:#D16C5B;        /* soft terracotta */
+        --ok:#6FB37B;            /* gentle green */
+        --shadow: 0 10px 30px rgba(0,0,0,.12);
+      }
+      *{ box-sizing: border-box; }
+      html,body{ height:100%; }
+      body{
+        margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        color:var(--text); background: radial-gradient(1000px 700px at 80% -10%, rgba(109,166,122,0.12), transparent), var(--bg);
+      }
+      header{
+        padding:16px 20px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+        background:linear-gradient(180deg, #00000006, #00000000);
+        border-bottom:1px solid #00000014;
+      }
+      h1{ font-size:18px; margin:0; letter-spacing: .2px; }
+      .muted{ color:var(--muted); font-weight:500; }
+
+      .controls{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+      label{ font-size:12px; color:var(--muted); display:block; margin-bottom:6px; }
+      input[type="number"], select, textarea{
+        background:var(--panel); color:var(--text); border:1px solid #0000001a; border-radius:10px; padding:10px 12px; outline:none; box-shadow:var(--shadow);
+      }
+      /* Name text input: match corners, green focus, left padding */
+      #name-input{
+        background:var(--panel);
+        color:var(--text);
+        border:1px solid #0000001a;
+        border-radius:10px;
+        padding:10px 12px;
+        padding-left:8px; /* requested 8px left padding */
+        outline:none;
+        box-shadow:var(--shadow);
+      }
+      #name-input:focus{
+        border-color:#0A3913;
+        outline:none;
+      }
+      /* Shake strength slider (dark green) */
+      input[type="range"]#strength{
+        height: 32px;
+        -webkit-appearance: none;
+        appearance: none;
+        background: transparent;
+      }
+      input[type="range"]#strength:focus{ outline: none; }
+      /* Track */
+      input[type="range"]#strength::-webkit-slider-runnable-track{
+        height: 6px;
+        background: #0A3913;
+        border-radius: 999px;
+        border: 1px solid #0A3913;
+      }
+      input[type="range"]#strength::-moz-range-track{
+        height: 6px;
+        background: #0A3913;
+        border-radius: 999px;
+        border: 1px solid #0A3913;
+      }
+      /* Thumb */
+      input[type="range"]#strength::-webkit-slider-thumb{
+        -webkit-appearance: none;
+        appearance: none;
+        width: 18px; height: 18px; border-radius: 50%;
+        background: #FAF3ED;
+        border: 2px solid #0A3913;
+        margin-top: -6px; /* center on 6px track */
+        box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+      }
+      input[type="range"]#strength::-moz-range-thumb{
+        width: 18px; height: 18px; border-radius: 50%;
+        background: #FAF3ED;
+        border: 2px solid #0A3913;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+      }
+      input[type="range"]#strength:active::-webkit-slider-thumb{ transform: scale(1.02); }
+      input[type="number"]{ width:90px; }
+      textarea{ min-width:340px; min-height:44px; resize:vertical; }
+      .field{ display:flex; flex-direction:column; }
+      .row{ display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; }
+      .btn{
+        background:linear-gradient(180deg, #00000010, #00000000), var(--panel);
+        color:var(--text); border:1px solid #0000001a; border-radius:12px; padding:10px 14px; font-weight:700; cursor:pointer;
+        box-shadow: var(--shadow); transition: transform .06s ease, background .2s ease, border-color .2s ease; -webkit-user-select:none; user-select:none;
+      }
+      .btn:hover{ transform: translateY(-1px); }
+      .btn:active{ transform: translateY(0); }
+  /* Fallbacks avoiding color-mix for broad browser support */
+  .btn.primary{ background: linear-gradient(180deg, rgba(134,187,216,0.35), rgba(134,187,216,0.12)); border-color: rgba(134,187,216,0.45); }
+  .btn.accent{ background: linear-gradient(180deg, rgba(109,166,122,0.35), rgba(109,166,122,0.12)); border-color: rgba(109,166,122,0.45); color:#17321F; }
+  .btn.danger{ background: linear-gradient(180deg, rgba(209,108,91,0.35), rgba(209,108,91,0.12)); border-color: rgba(209,108,91,0.45); }
+      /* Specific buttons: Add and Pick Next in dark green with light beige text */
+      #btn-add-name,
+  #btn-pick,
+  #btn-continue{
+        background:#0A3913 !important;
+        border-color:#0A3913 !important;
+        color:#FAF3ED !important;
+      }
+  #btn-add-name:hover,
+  #btn-pick:hover,
+  #btn-continue:hover{ filter: brightness(1.05); }
+      .btn.small{ padding:8px 10px; border-radius:10px; font-weight:600; }
+      .btn[disabled]{ opacity:.55; pointer-events:none; }
+
+      main{ display:grid; grid-template-columns: 1fr 300px; gap:14px; padding:14px; }
+      @media (max-width: 1000px){ main{ grid-template-columns: 1fr; } }
+
+      .stage-card{
+        background:linear-gradient(180deg, #00000006, #00000000), var(--panel-2);
+        border:1px solid #00000014; border-radius:16px; overflow:hidden; position:relative;
+        min-height: 520px; display:flex; flex-direction:column;
+      }
+      #stage{ flex: 1 1 auto; position:relative; }
+      #stage canvas{ width:100% !important; height:100% !important; display:block; }
+  .stage-footer{ display:flex; gap:10px; align-items:center; justify-content:space-between; padding:10px; border-top:1px solid #0000001a; background:#00000008; }
+      .left, .right{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+
+      .side{
+        background:linear-gradient(180deg, #00000006, #00000000), var(--panel-2);
+        border:1px solid #00000014; border-radius:16px; padding:12px; display:flex; flex-direction:column; gap:10px;
+        min-height: 520px;
+      }
+  .pill{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; border:1px solid #0000001a; background:#00000008; color:var(--muted); font-size:12px; }
+      .selected-list{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{ border:1px solid #0000001a; border-radius:999px; padding:4px 8px 4px 4px; display:flex; align-items:center; gap:6px; background:#00000008; }
+      .chip img{ width:20px; height:20px; border-radius:999px; display:block; }
+      .chip .name{ font-size:12px; color:var(--text); opacity:.9; }
+
+      .overlay{ position:absolute; inset:0; display:none; align-items:center; justify-content:center; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+      .overlay.show{ display:flex; }
+      .winner{
+        display:flex; flex-direction:column; align-items:center; gap:12px; padding:18px; border-radius:16px; border:1px solid #0000001a;
+        background: radial-gradient(300px 140px at 50% 0%, rgba(134,187,216,0.18), transparent), #FFFFFFEE; box-shadow: var(--shadow);
+        animation: pop .35s ease both;
+      }
+      .winner img{ width:140px; height:140px; border-radius:999px; display:block; border:3px solid rgba(109,166,122,0.35); box-shadow: 0 6px 30px rgba(134,187,216,0.30); }
+      .winner .title{ font-weight:800; letter-spacing:.3px; }
+      .winner .sub{ font-size:12px; color:var(--muted); }
+      @keyframes pop{ from{ transform: scale(.8); opacity:.0 } to { transform: scale(1); opacity:1 } }
+
+      /* Utilities to avoid inline styles */
+      .field-grow{ min-width:340px; flex:1 1 auto; }
+      .row-8{ display:flex; gap:8px; }
+      .between{ display:flex; align-items:center; justify-content:space-between; }
+      .note{ margin-top:auto; font-size:12px; color:var(--muted); line-height:1.4; }
+  .minw-220{ min-width:220px; }
+
+  /* Header layout helpers */
+  .controls.bar{ flex:1 1 auto; justify-content:space-between; width:100%; }
+  .row-nowrap{ flex-wrap:nowrap; gap:16px; align-items:flex-end; }
+  .row-wrap-end{ flex-wrap:wrap; gap:12px; align-items:flex-end; }
+  .field-grow-lg{ flex:1 1 420px; }
+  .flex-grow{ flex:1 1 auto; }
+
+      /* Rumble effect for the stage card during Shake */
+  .stage-card.rumble{ animation: rumble 0.06s linear infinite; }
+      @keyframes rumble{
+        0%{ transform: translate(0px, 0px) rotate(0deg); }
+        10%{ transform: translate(-1px, 0px) rotate(-0.3deg); }
+        20%{ transform: translate(1px, 1px) rotate(0.2deg); }
+        30%{ transform: translate(0px, -1px) rotate(0.1deg); }
+        40%{ transform: translate(1px, 0px) rotate(-0.2deg); }
+        50%{ transform: translate(-1px, 1px) rotate(0.2deg); }
+        60%{ transform: translate(0px, 0px) rotate(0deg); }
+        70%{ transform: translate(1px, -1px) rotate(0.3deg); }
+        80%{ transform: translate(-1px, 0px) rotate(-0.1deg); }
+        90%{ transform: translate(0px, 1px) rotate(0.2deg); }
+        100%{ transform: translate(0px, 0px) rotate(0deg); }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="controls bar">
+        <div class="row row-nowrap">
+          <div class="field field-grow-lg">
+            <div class="row-8">
+              <input id="name-input" type="text" placeholder="Add a name" aria-label="Add a name" class="minw-220 flex-grow" />
+              <button id="btn-add-name" class="btn primary">Add</button>
+              <button id="btn-clear-names" class="btn small" title="Clear all names">Clear all</button>
+            </div>
+          </div>
+        </div>
+        <div class="row row-wrap-end">
+          <div class="field">
+            <select id="mode" aria-label="Mode">
+              <option value="bowl">Bowl (Physics)</option>
+              <option value="popcorn" disabled>Popcorn (coming soon)</option>
+              <option value="wheel" disabled>Wheel (coming soon)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="strength">Shake strength</label>
+            <input id="strength" type="range" min="1" max="10" value="5" />
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="stage-card">
+        <div id="stage"></div>
+        <div class="overlay" id="overlay">
+          <div class="winner" role="dialog" aria-live="polite">
+            <img id="winner-img" alt="Winner avatar" />
+            <div class="title" id="winner-title">Picked!</div>
+            <div class="sub" id="winner-sub">They are removed from the bowl.</div>
+            <div class="row-8">
+              <button id="btn-continue" class="btn accent">Continue</button>
+              <button id="btn-undo" class="btn">Undo</button>
+            </div>
+          </div>
+        </div>
+        <div class="stage-footer">
+          <div class="left">
+            <button id="btn-shake" class="btn">Shake</button>
+            <button id="btn-pick" class="btn accent">Pick next</button>
+            <button id="btn-reset" class="btn danger">Reset</button>
+          </div>
+          <div class="right">
+            <span class="pill" id="status-pill">Ready</span>
+          </div>
+        </div>
+      </section>
+      <aside class="side">
+        <div class="between">
+          <div class="pill">Selected</div>
+        </div>
+        <div class="selected-list" id="selected-list"></div>
+      </aside>
+    </main>
+
+    <!-- Matter.js -->
+    <script src="https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js"></script>
+    <script>
+  (function(){
+  const { Engine, Render, Runner, World, Bodies, Body, Common, Sleeping } = Matter;
+
+        // ---------- State ----------
+        const app = {
+          engine: null,
+          render: null,
+          runner: null,
+          world: null,
+          stageEl: document.getElementById('stage'),
+          overlayEl: document.getElementById('overlay'),
+          winnerImgEl: document.getElementById('winner-img'),
+          winnerTitleEl: document.getElementById('winner-title'),
+          selectedListEl: document.getElementById('selected-list'),
+          statusPill: document.getElementById('status-pill'),
+          mode: 'bowl',
+          participants: [],
+          selected: [],
+          walls: [],
+          size: { w: 800, h: 540 },
+          radius: 40,
+          picking: false,
+          lastPicked: null,
+        };
+
+        // ---------- UI ----------
+  const modeSelect = document.getElementById('mode');
+  const nameInput = document.getElementById('name-input');
+  const btnAddName = document.getElementById('btn-add-name');
+  const btnClearNames = document.getElementById('btn-clear-names');
+        const btnShake = document.getElementById('btn-shake');
+        const btnPick = document.getElementById('btn-pick');
+        const btnReset = document.getElementById('btn-reset');
+        const btnContinue = document.getElementById('btn-continue');
+        const btnUndo = document.getElementById('btn-undo');
+  const strengthRange = document.getElementById('strength');
+
+        function setStatus(text){ app.statusPill.textContent = text; }
+
+        // ---------- Utils ----------
+        function throttle(fn, wait){
+          let last = 0;
+          return function(...args){
+            const now = Date.now();
+            if (now - last >= wait){ last = now; fn.apply(this, args); }
+          };
+        }
+  function wait(ms){ return new Promise(res => setTimeout(res, ms)); }
+
+        // ---------- Placeholder avatars ----------
+        function pastel(i){
+          const palette = ['#9bafff','#6fffd2','#ffb3c1','#ffd166','#a3f7ff','#c7f36b','#ff9cee','#b9f','#f6d365','#fda085'];
+          return palette[i % palette.length];
+        }
+        function makeAvatarDataURL(index, size=128){
+          const canvas = document.createElement('canvas');
+          canvas.width = canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          const bg = pastel(index);
+          ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(size/2, size/2, size*0.48, 0, Math.PI*2); ctx.fill();
+          const grad = ctx.createRadialGradient(size*0.35, size*0.3, 5, size*0.35, size*0.3, size*0.4);
+          grad.addColorStop(0,'#ffffff88'); grad.addColorStop(1,'#ffffff00');
+          ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(size/2-8, size/2-12, size*0.34, 0, Math.PI*2); ctx.fill();
+          const label = String(index+1);
+          ctx.fillStyle = '#0a0d1b';
+          ctx.font = `bold ${Math.round(size*0.42)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.shadowColor = '#00000033'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
+          ctx.fillText(label, size/2, size/2+2);
+          return canvas.toDataURL('image/png');
+        }
+
+  // ---------- Avatars ----------
+        const AVATAR_FILES = [
+          'AvatarLibrary/20250819_a-bear-in-a-flat-vector-style-depicted-with-simpl_U3.webp',
+          'AvatarLibrary/20250819_a-bird-in-a-flat-vector-style-depicted-with-simpl_U2.webp',
+          'AvatarLibrary/20250819_a-cat-in-a-flat-vector-style-depicted-with-simple_U0.webp',
+          'AvatarLibrary/20250819_a-dragon-in-a-flat-vector-style-depicted-with-sim_U2.webp',
+          'AvatarLibrary/20250819_a-fox-in-a-flat-vector-style-depicted-with-simple_U2.webp',
+          'AvatarLibrary/20250819_a-frog-in-a-flat-vector-style-depicted-with-simpl_U3.webp',
+          'AvatarLibrary/20250819_a-lion-in-a-flat-vector-style-depicted-with-simpl_U0.webp',
+          'AvatarLibrary/20250819_a-rabbit-in-a-flat-vector-style-depicted-with-sim_U1.webp',
+          'AvatarLibrary/20250819_a-turtle-in-a-flat-vector-style-depicted-with-sim_U2.webp',
+          'AvatarLibrary/20250819_an-elephant-in-a-flat-vector-style-depicted-with-_U0.webp'
+        ];
+  app.avatarPool = AVATAR_FILES.slice();
+  app.avatarCache = new Map(); // key: `${src}|${size}` -> masked dataURL
+  // Roster holds both small (80px) for bowl sprites and large (256px) for popup
+  app.roster = []; // { name, src, avatarSmall, avatarLarge }
+
+        async function loadImage(src){
+          return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = src;
+          });
+        }
+        async function maskAvatarToCircle(src, size=80){
+          const key = `${src}|${size}`;
+          if(app.avatarCache.has(key)) return app.avatarCache.get(key);
+          const img = await loadImage(src);
+          const canvas = document.createElement('canvas');
+          canvas.width = canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0,0,size,size);
+          ctx.save();
+          ctx.beginPath(); ctx.arc(size/2, size/2, size/2, 0, Math.PI*2); ctx.closePath(); ctx.clip();
+          const scale = Math.min(size / img.width, size / img.height); // contain
+          const dw = img.width * scale, dh = img.height * scale;
+          const dx = (size - dw) / 2, dy = (size - dh) / 2;
+          ctx.drawImage(img, dx, dy, dw, dh);
+          ctx.restore();
+          const dataUrl = canvas.toDataURL('image/png');
+          app.avatarCache.set(key, dataUrl);
+          return dataUrl;
+        }
+
+        // ---------- Bodies ----------
+  function createParticipant(index, name, avatarSmall, avatarLarge){
+          const r = app.radius;
+          const col = index % 8;
+          const row = Math.floor(index/8);
+          const startX = app.size.w/2 - Math.min(app.roster.length||7,8) * (r*2+6)/2;
+          const floorY = app.size.h - 80;
+          const x = startX + col*(r*2+6) + Common.random(-3,3);
+          const y = floorY - row*(r*2+10) - Common.random(0,6);
+          const body = Bodies.circle(x, y, r, {
+            restitution: 0.9,
+            friction: 0.02,
+            frictionAir: 0.01,
+            density: 0.0015,
+            render: {
+              opacity: 1,
+              sprite: { texture: avatarSmall, xScale: (r*2)/80, yScale: (r*2)/80 }
+            }
+          });
+          body.plugin = { participantIndex: index, avatarSmall, avatarLarge, name };
+          return body;
+        }
+  function createBodiesFromRoster(){
+          const bodies = [];
+          for(let i=0;i<app.roster.length;i++){
+            const person = app.roster[i];
+            bodies.push(createParticipant(i, person.name, person.avatarSmall, person.avatarLarge));
+          }
+          return bodies;
+        }
+
+        // ---------- Modes ----------
+        const modes = {
+          bowl: {
+            setupWalls(){
+              const w = app.size.w, h = app.size.h;
+              const thickness = 26;
+              const cx = w/2;
+              const cy = h - Math.min(120, Math.round(h*0.18));
+              const radius = Math.min(w*0.38, h*0.48);
+              const start = Math.PI + 0.55;   // left rim
+              const end   = -0.55;            // right rim
+              const segments = Math.max(22, Math.round((end - start) * -radius / 26)); // density based on arc length
+
+        function arcSegments(cx, cy, r, a0, a1, n, t){
+                const segs = [];
+                const step = (a1 - a0) / n;
+                for(let i=0;i<n;i++){
+                  const a = a0 + i*step, b = a + step;
+                  const x1 = cx + r * Math.cos(a), y1 = cy + r * Math.sin(a);
+                  const x2 = cx + r * Math.cos(b), y2 = cy + r * Math.sin(b);
+                  const mx = (x1 + x2)/2, my = (y1 + y2)/2;
+                  const len = Math.hypot(x2 - x1, y2 - y1);
+                  const angle = Math.atan2(y2 - y1, x2 - x1);
+          const seg = Bodies.rectangle(mx, my, len, t, { isStatic:true, angle, render:{ fillStyle:'#DCCFC5' } });
+                  segs.push(seg);
+                }
+                return segs;
+              }
+
+              const back  = Bodies.rectangle(w/2, -1000, w*2, 30, { isStatic:true, render:{visible:false} });
+              const bowlSegments = arcSegments(cx, cy, radius, start, end, segments, thickness);
+              app.walls = [back, ...bowlSegments];
+              World.add(app.world, app.walls);
+            },
+    shake(intensity=0.025, duration=420){
+              if(!app.participants.length) return;
+              const steps = Math.max(4, Math.round(duration/60));
+              let count = 0;
+              const id = setInterval(()=>{
+                count++;
+                for(const b of app.participants){
+                  // Wake sleeping bodies
+                  try{ Sleeping.set(b, false); }catch(_){ /* fallback below */ }
+                  // Force magnitude scales with mass and a bit of randomness
+      const base = intensity * (0.5 + Math.random()*0.8) * b.mass;
+      const fx = (Math.random() - 0.5) * base * 1.8; // stronger lateral than vertical
+      const fy = -Math.abs(intensity*0.3) * (0.8 + Math.random()*0.6) * b.mass; // gentle upward
+                  Body.applyForce(b, b.position, { x: fx, y: fy });
+                  // Nudge linear velocity to ensure movement and wake-up in older builds
+      const jx = (Math.random()-0.5) * (intensity*2.2);
+      const jy = -(intensity*1.2) * (0.8 + Math.random()*0.5);
+      const nvx = b.velocity.x + jx;
+      const nvy = b.velocity.y + jy;
+      // Clamp overall speed to avoid launching out of the bowl
+      const maxSpeed = 5.0;
+      const speed = Math.hypot(nvx, nvy);
+      const scale = speed > maxSpeed ? (maxSpeed / speed) : 1;
+      Body.setVelocity(b, { x: nvx*scale, y: nvy*scale });
+                  // Add some spin
+      const spin = (Math.random() - 0.5) * 0.35;
+                  Body.setAngularVelocity(b, b.angularVelocity + spin);
+                }
+                if(count >= steps) clearInterval(id);
+              }, 60);
+            }
+          }
+        };
+
+        // ---------- Engine ----------
+        function addSceneStatics(){
+          const bgRect = Bodies.rectangle(app.size.w/2, app.size.h+200, app.size.w*2, 400, { isStatic:true, render:{ fillStyle:'#FAF3ED' } });
+          World.add(app.world, bgRect);
+          const leftCatcher = Bodies.rectangle(-200, app.size.h/2, 400, app.size.h*2, { isStatic:true, render:{visible:false}});
+          const rightCatcher = Bodies.rectangle(app.size.w+200, app.size.h/2, 400, app.size.h*2, { isStatic:true, render:{visible:false}});
+          World.add(app.world, [leftCatcher, rightCatcher]);
+        }
+
+        function setupEngine(){
+          if(app.runner){ Runner.stop(app.runner); app.runner = null; }
+          if(app.render){ Render.stop(app.render); app.stageEl.innerHTML = ''; app.render = null; }
+          if(app.engine){ Engine.clear(app.engine); app.engine = null; }
+
+          app.engine = Engine.create({ enableSleeping: false });
+          app.world = app.engine.world;
+          const rect = app.stageEl.getBoundingClientRect();
+          app.size.w = Math.max(600, Math.floor(rect.width || 900));
+          app.size.h = Math.max(520, Math.floor(rect.height || 560));
+
+      app.render = Render.create({
+            element: app.stageEl,
+            engine: app.engine,
+            options: {
+              width: app.size.w,
+              height: app.size.h,
+        background:'#FAF3ED',
+              pixelRatio: window.devicePixelRatio || 1,
+              wireframes:false,
+              // Keep avatars at full brightness; do not dim sleeping bodies
+              showSleeping: false
+            }
+          });
+          Render.run(app.render);
+          app.runner = Runner.create();
+          Runner.run(app.runner, app.engine);
+
+          addSceneStatics();
+          modes[app.mode].setupWalls();
+
+          window.addEventListener('resize', throttle(() => {
+            const r = app.stageEl.getBoundingClientRect();
+            app.size.w = Math.max(600, Math.floor(r.width || 900));
+            app.size.h = Math.max(520, Math.floor(r.height || 560));
+            app.render.canvas.width = app.size.w * (window.devicePixelRatio||1);
+            app.render.canvas.height = app.size.h * (window.devicePixelRatio||1);
+            app.render.options.width = app.size.w;
+            app.render.options.height = app.size.h;
+            regenerate(false);
+          }, 300));
+        }
+
+        // ---------- Actions ----------
+        async function regenerate(clearHistory=true){
+          if(app.engine){ World.clear(app.world, false); app.participants = []; app.walls = []; }
+          addSceneStatics();
+          modes[app.mode].setupWalls();
+          // Ensure all roster avatars are masked at both sizes
+          for(const p of app.roster){
+            // Migrate older format { avatar } to { avatarSmall, avatarLarge }
+            if(p.avatar && !p.avatarSmall){ p.avatarSmall = p.avatar; }
+            // If we have a source, regenerate masks at desired sizes
+            if(p.src){
+              try{
+                if(!p.avatarSmall) p.avatarSmall = await maskAvatarToCircle(p.src, 80);
+                if(!p.avatarLarge) p.avatarLarge = await maskAvatarToCircle(p.src, 256);
+              }catch(_){ /* ignore */ }
+            }
+            // Fallbacks
+            if(!p.avatarLarge) p.avatarLarge = p.avatarSmall;
+            if(!p.avatarSmall && p.name){ p.avatarSmall = makeAvatarDataURL(app.roster.indexOf(p), 80); }
+          }
+          const bodies = createBodiesFromRoster();
+          World.add(app.world, bodies);
+          app.participants = bodies;
+          if(clearHistory){ app.selected = []; renderSelectedList(); }
+          setStatus(`Ready • ${app.participants.length} in bowl`);
+        }
+        function renderSelectedList(){
+          app.selectedListEl.innerHTML = '';
+          for(const item of app.selected){
+            const el = document.createElement('div'); el.className = 'chip';
+            const img = document.createElement('img'); img.src = item.avatar; img.alt = item.name || 'Participant'; el.appendChild(img);
+            const name = document.createElement('span'); name.className = 'name'; name.textContent = item.name || 'Participant'; el.appendChild(name);
+            app.selectedListEl.appendChild(el);
+          }
+        }
+        async function addName(){
+          const raw = (nameInput.value||'').trim();
+          if(!raw){ setStatus('Enter a name'); nameInput.focus(); return; }
+          if(app.roster.find(p=> p.name.toLowerCase()===raw.toLowerCase())){ setStatus('Name already added'); nameInput.select(); return; }
+          if(!app.avatarPool.length){ setStatus('No more avatars available'); return; }
+          const avatarSrc = app.avatarPool.shift();
+          let maskedSmall, maskedLarge;
+          try{
+            [maskedSmall, maskedLarge] = await Promise.all([
+              maskAvatarToCircle(avatarSrc, 80),
+              maskAvatarToCircle(avatarSrc, 256)
+            ]);
+          }catch(_){
+            // Fallback to a generated placeholder circle with initials
+            maskedSmall = makeAvatarDataURL(app.roster.length, 80);
+            maskedLarge = makeAvatarDataURL(app.roster.length, 256);
+          }
+          const person = { name: raw, src: avatarSrc, avatarSmall: maskedSmall, avatarLarge: maskedLarge };
+          app.roster.push(person);
+          // Physically add the new body
+          const body = createParticipant(app.participants.length, person.name, person.avatarSmall, person.avatarLarge);
+          Body.setPosition(body, { x: app.size.w/2 + Common.random(-40,40), y: app.size.h*0.2 });
+          World.add(app.world, body);
+          app.participants.push(body);
+          nameInput.value = '';
+          setStatus(`Added ${person.name} • ${app.participants.length} in bowl`);
+        }
+        function shake(){
+          const level = Math.max(1, Math.min(10, Number(strengthRange?.value || 5)));
+          const intensity = 0.012 + (level-1) * (0.028/9); // 0.012..0.04
+          const duration = 360 + (level-1) * (240/9); // 360..600ms
+          modes[app.mode].shake(intensity, duration);
+          const card = document.querySelector('.stage-card');
+          if(card){ card.classList.add('rumble'); setTimeout(()=> card.classList.remove('rumble'), duration + 120); }
+          setStatus('Shaking…');
+          setTimeout(()=> setStatus(`Ready • ${app.participants.length} in bowl`), 800);
+        }
+        async function pickNext(){
+          if(app.picking) return;
+          if(!app.participants.length){ setStatus('No one left to pick'); return; }
+          app.picking = true; setStatus('Picking…');
+
+          // 3 quick shakes with visual rumble
+          const card = document.querySelector('.stage-card');
+          for(let i=0;i<3;i++){
+            modes[app.mode].shake(0.02, 180);
+            if(card){ card.classList.add('rumble'); setTimeout(()=> card.classList.remove('rumble'), 240); }
+            await wait(220);
+          }
+
+          // Choose and eject in one smooth motion
+          const idx = Math.floor(Math.random() * app.participants.length);
+          const chosen = app.participants[idx];
+          try{ Sleeping.set(chosen, false); }catch(_){ }
+          const upward = 0.09 * chosen.mass;
+          const sideways = (Math.random() < 0.5 ? -1 : 1) * 0.035 * chosen.mass;
+          Body.applyForce(chosen, chosen.position, { x: sideways, y: -upward });
+          // Give an immediate velocity boost for a clean arc
+          Body.setVelocity(chosen, { x: chosen.velocity.x + (sideways>0? 3.2:-3.2), y: chosen.velocity.y - 5.0 });
+          Body.setAngularVelocity(chosen, chosen.angularVelocity + (Math.random() - 0.5) * 0.7);
+
+          const thresholdY = app.size.h * 0.28;
+          const start = Date.now();
+          const maxMs = 1800;
+          let done = false;
+          const iv = setInterval(()=>{
+            if(done) return;
+            const pos = chosen.position;
+            const outTop = pos.y < thresholdY;
+            const outSides = pos.x < 20 || pos.x > app.size.w-20;
+            if(outTop || outSides || (Date.now()-start) > maxMs){
+              done = true; clearInterval(iv);
+              // If still inside after timeout, nudge directly upward to finalize path
+              if(!(outTop||outSides)){
+                Body.setPosition(chosen, { x: app.size.w/2, y: thresholdY - 12 });
+              }
+              finalizePick(chosen);
+            }
+          }, 30);
+        }
+        function finalizePick(body){
+          const i = app.participants.indexOf(body); if(i !== -1) app.participants.splice(i,1);
+          World.remove(app.world, body);
+          const name = body.plugin?.name || `#${(body.plugin?.participantIndex ?? 0)+1}`;
+          const avatarSmall = body.plugin?.avatarSmall;
+          const avatarLarge = body.plugin?.avatarLarge || avatarSmall;
+          const picked = { name, avatar: avatarSmall };
+          app.selected.push(picked); renderSelectedList();
+          app.winnerImgEl.src = avatarLarge; app.winnerTitleEl.textContent = name; app.overlayEl.classList.add('show');
+          app.lastPicked = { name }; app.picking = false; setStatus(`Picked ${name} • ${app.participants.length} left`);
+        }
+        function continueAfterPick(){ app.overlayEl.classList.remove('show'); }
+        function undoLast(){
+          app.overlayEl.classList.remove('show'); if(!app.lastPicked) return;
+          const i = app.selected.findIndex(s=> s.name === app.lastPicked.name);
+          if(i !== -1){
+            const restoredIndex = app.participants.length;
+            // Find the roster person to restore textures
+            const person = app.roster.find(p=> p.name === app.lastPicked.name);
+            const small = person?.avatarSmall || app.selected[i].avatar;
+            const large = person?.avatarLarge || small;
+            const body = createParticipant(restoredIndex, person?.name || app.lastPicked.name, small, large);
+            Body.setPosition(body, { x: app.size.w/2, y: app.size.h*0.2 });
+            World.add(app.world, body);
+            app.participants.push(body);
+            app.selected.splice(i,1);
+            renderSelectedList();
+            setStatus(`Undo • ${app.participants.length} in bowl`);
+          }
+          app.lastPicked = null;
+        }
+        function resetAll(){ app.overlayEl.classList.remove('show'); setupEngine(); regenerate(true); setStatus('Reset'); }
+
+        // ---------- Wire UI ----------
+        btnAddName.addEventListener('click', () => { addName(); });
+        nameInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); addName(); }});
+        btnClearNames.addEventListener('click', () => {
+          app.overlayEl.classList.remove('show');
+          app.roster = []; app.selected = []; app.participants = [];
+          app.avatarPool = AVATAR_FILES.slice(); app.avatarCache = new Map(); renderSelectedList();
+          regenerate(true); setStatus('Cleared names');
+        });
+        btnShake.addEventListener('click', shake);
+        btnPick.addEventListener('click', pickNext);
+        btnReset.addEventListener('click', resetAll);
+        btnContinue.addEventListener('click', continueAfterPick);
+        btnUndo.addEventListener('click', undoLast);
+  modeSelect.addEventListener('change', (e)=>{ app.mode = e.target.value; resetAll(); });
+  // Note: Global keyboard shortcuts removed to prevent accidental actions while typing.
+
+        // ---------- Boot ----------
+        setupEngine();
+        regenerate(true);
+      })();
+    </script>
+  </body>
+</html>
