@@ -16,6 +16,7 @@ A fun, single-file HTML picker that uses physics to randomly select a person fro
 - Light beige theme (#FAF3ED) with calm, natural accents.
 - Avatars are masked to round circles; crisp high-res is used for the winner popup.
 - Matter.js via CDN. No build step; everything is in `index.html`.
+ - Background: If `bkgd.jpg` is present in this folder, it will show behind the bowl at ~20% opacity. If it's missing, a subtle built-in gradient fallback is used so the scene still feels alive. Replace with your own image by dropping a `bkgd.jpg` next to `index.html`.
 
 ## Deploy
 - GitHub Pages: push this folder and enable Pages on the repo.
