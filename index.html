@@ -356,7 +356,7 @@
   const btnMute = document.getElementById('btn-mute');
   const iconMusic = document.getElementById('icon-music');
   const iconMute = document.getElementById('icon-mute');
-  const artPopcorn = document.getElementById('art-popcorn');
+  let artPopcorn = document.getElementById('art-popcorn');
 
         function setStatus(text){ app.statusPill.textContent = text; }
 
@@ -690,8 +690,8 @@
               const leftMid = { x: (leftXTop+leftXBottom)/2, y: (topY+floorY)/2 };
               const rightMid = { x: (rightXTop+rightXBottom)/2, y: (topY+floorY)/2 };
 
-              const leftWall = Bodies.rectangle(leftMid.x, leftMid.y, leftLen, wallT, { isStatic:true, angle: leftAngle, render:{ fillStyle:'rgba(220,207,197,0.85)'} });
-              const rightWall = Bodies.rectangle(rightMid.x, rightMid.y, rightLen, wallT, { isStatic:true, angle: rightAngle, render:{ fillStyle:'rgba(220,207,197,0.85)'} });
+              const leftWall = Bodies.rectangle(leftMid.x, leftMid.y, leftLen, wallT, { isStatic:true, angle: leftAngle, render:{ visible:false } });
+              const rightWall = Bodies.rectangle(rightMid.x, rightMid.y, rightLen, wallT, { isStatic:true, angle: rightAngle, render:{ visible:false } });
               const back = Bodies.rectangle(cx, -1000, w*2, 30, { isStatic:true, render:{ visible:false } });
               app.walls = [floor, leftWall, rightWall, back];
               World.add(app.world, app.walls);
@@ -732,35 +732,82 @@
           artPopcorn.innerHTML = '';
           const w = app.size.w, h = app.size.h;
           const svgNS = 'http://www.w3.org/2000/svg';
-          const g = document.createElementNS(svgNS, 'g');
           artPopcorn.setAttribute('viewBox', `0 0 ${w} ${h}`);
 
-          // Bucket polygon
+          // Geometry
           const leftXTop = cx - topW/2, rightXTop = cx + topW/2;
           const leftXBottom = cx - bottomW/2, rightXBottom = cx + bottomW/2;
-          const bucket = document.createElementNS(svgNS, 'polygon');
-          bucket.setAttribute('points', `${leftXTop},${topY} ${rightXTop},${topY} ${rightXBottom},${floorY} ${leftXBottom},${floorY}`);
-          bucket.setAttribute('fill', '#FFFFFF');
-          bucket.setAttribute('stroke', '#C0392B');
-          bucket.setAttribute('stroke-width', '6');
-          g.appendChild(bucket);
+          const bucketPoints = `${leftXTop},${topY} ${rightXTop},${topY} ${rightXBottom},${floorY} ${leftXBottom},${floorY}`;
 
-          // Vertical red stripes
+          // Root group
+          const root = document.createElementNS(svgNS, 'g');
+
+          // Defs: clip the stripes to bucket shape
+          const defs = document.createElementNS(svgNS, 'defs');
+          const clip = document.createElementNS(svgNS, 'clipPath');
+          clip.setAttribute('id', 'clip-bucket');
+          const clipPoly = document.createElementNS(svgNS, 'polygon');
+          clipPoly.setAttribute('points', bucketPoints);
+          clip.appendChild(clipPoly);
+          defs.appendChild(clip);
+          root.appendChild(defs);
+
+          // Bucket base (white)
+          const bucket = document.createElementNS(svgNS, 'polygon');
+          bucket.setAttribute('points', bucketPoints);
+          bucket.setAttribute('fill', '#FFFFFF');
+          root.appendChild(bucket);
+
+          // Stripes (clipped to bucket)
+          const stripesGroup = document.createElementNS(svgNS, 'g');
+          stripesGroup.setAttribute('clip-path', 'url(#clip-bucket)');
           const stripes = 7;
           for(let i=0;i<stripes;i++){
             const t = (i+0.5)/stripes; // center of stripe
             const xTop = leftXTop + t * (rightXTop-leftXTop);
             const xBottom = leftXBottom + t * (rightXBottom-leftXBottom);
             const stripe = document.createElementNS(svgNS, 'polygon');
-            const halfStrip = (topW/stripes)*0.35;
-            const halfStripB = (bottomW/stripes)*0.35;
+            const halfStrip = (topW/stripes)*0.36; // a bit wider at top
+            const halfStripB = (bottomW/stripes)*0.36;
             stripe.setAttribute('points', `${xTop-halfStrip},${topY} ${xTop+halfStrip},${topY} ${xBottom+halfStripB},${floorY} ${xBottom-halfStripB},${floorY}`);
-            stripe.setAttribute('fill', '#C0392B');
-            stripe.setAttribute('opacity', '0.9');
-            g.appendChild(stripe);
+            stripe.setAttribute('fill', '#D64A3A');
+            stripe.setAttribute('opacity', '0.95');
+            stripesGroup.appendChild(stripe);
           }
+          root.appendChild(stripesGroup);
 
-          artPopcorn.appendChild(g);
+          // Outline and rims
+          const outline = document.createElementNS(svgNS, 'polygon');
+          outline.setAttribute('points', bucketPoints);
+          outline.setAttribute('fill', 'none');
+          outline.setAttribute('stroke', '#9E2F25');
+          outline.setAttribute('stroke-width', '6');
+          outline.setAttribute('stroke-linejoin', 'round');
+          root.appendChild(outline);
+
+          // Top rim
+          const topRim = document.createElementNS(svgNS, 'line');
+          topRim.setAttribute('x1', leftXTop);
+          topRim.setAttribute('y1', topY);
+          topRim.setAttribute('x2', rightXTop);
+          topRim.setAttribute('y2', topY);
+          topRim.setAttribute('stroke', '#B83A2F');
+          topRim.setAttribute('stroke-width', '8');
+          topRim.setAttribute('stroke-linecap', 'round');
+          root.appendChild(topRim);
+
+          // Bottom edge
+          const bottomEdge = document.createElementNS(svgNS, 'line');
+          bottomEdge.setAttribute('x1', leftXBottom);
+          bottomEdge.setAttribute('y1', floorY);
+          bottomEdge.setAttribute('x2', rightXBottom);
+          bottomEdge.setAttribute('y2', floorY);
+          bottomEdge.setAttribute('stroke', '#9E2F25');
+          bottomEdge.setAttribute('stroke-width', '8');
+          bottomEdge.setAttribute('stroke-linecap', 'round');
+          root.appendChild(bottomEdge);
+
+          artPopcorn.appendChild(root);
           artPopcorn.classList.add('show');
         }
 
@@ -783,6 +830,17 @@
           const rect = app.stageEl.getBoundingClientRect();
           app.size.w = Math.max(600, Math.floor(rect.width || 900));
           app.size.h = Math.max(520, Math.floor(rect.height || 560));
+
+      // Recreate the popcorn art SVG layer (cleared when we reset the stage)
+      {
+        const svgNS = 'http://www.w3.org/2000/svg';
+        artPopcorn = document.createElementNS(svgNS, 'svg');
+        artPopcorn.setAttribute('id', 'art-popcorn');
+        artPopcorn.setAttribute('viewBox', `0 0 ${app.size.w} ${app.size.h}`);
+        artPopcorn.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        artPopcorn.setAttribute('aria-hidden', 'true');
+        app.stageEl.appendChild(artPopcorn);
+      }
 
       app.render = Render.create({
             element: app.stageEl,
