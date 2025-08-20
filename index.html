@@ -132,6 +132,14 @@
         font-size: 18px; /* icon size */
         line-height: 1;
       }
+      /* Button icon images */
+      #btn-music img,
+      #btn-mute img{
+        width: 16px;
+        height: 16px;
+        display: block;
+        pointer-events: none; /* don't intercept clicks */
+      }
 
       main{ display:grid; grid-template-columns: 1fr 300px; gap:14px; padding:14px; }
       @media (max-width: 1000px){ main{ grid-template-columns: 1fr; } }
@@ -243,10 +251,14 @@
             <input id="strength" type="range" min="1" max="10" value="5" />
           </div>
           <div class="field">
-            <button id="btn-music" class="btn small" title="Play background music" aria-pressed="false" aria-label="Play music">▶</button>
+            <button id="btn-music" class="btn small" title="Play background music" aria-pressed="false" aria-label="Play music">
+              <img id="icon-music" src="Icons/Play.svg" alt="" />
+            </button>
           </div>
           <div class="field">
-            <button id="btn-mute" class="btn small" title="Mute all sound" aria-pressed="false" aria-label="Mute">🔊</button>
+            <button id="btn-mute" class="btn small" title="Mute all sound" aria-pressed="false" aria-label="Mute">
+              <img id="icon-mute" src="Icons/Speaker.svg" alt="" />
+            </button>
           </div>
         </div>
       </div>
@@ -326,6 +338,8 @@
   const strengthRange = document.getElementById('strength');
   const btnMusic = document.getElementById('btn-music');
   const btnMute = document.getElementById('btn-mute');
+  const iconMusic = document.getElementById('icon-music');
+  const iconMute = document.getElementById('icon-mute');
 
         function setStatus(text){ app.statusPill.textContent = text; }
 
@@ -346,7 +360,7 @@
         function setMuteButton(muted){
           if(!btnMute) return;
           btnMute.setAttribute('aria-pressed', muted ? 'true' : 'false');
-          btnMute.textContent = muted ? '�' : '🔊';
+          if(iconMute){ iconMute.src = muted ? 'Icons/Speaker Mute.svg' : 'Icons/Speaker.svg'; }
           btnMute.title = muted ? 'Unmute all sound' : 'Mute all sound';
           btnMute.setAttribute('aria-label', muted ? 'Unmute' : 'Mute');
         }
@@ -395,7 +409,7 @@
         function setMusicButton(playing){
           if(!btnMusic) return;
           btnMusic.setAttribute('aria-pressed', playing ? 'true' : 'false');
-          btnMusic.textContent = playing ? '⏸' : '▶';
+          if(iconMusic){ iconMusic.src = playing ? 'Icons/Pause.svg' : 'Icons/Play.svg'; }
           btnMusic.title = playing ? 'Pause background music' : 'Play background music';
           btnMusic.setAttribute('aria-label', playing ? 'Pause music' : 'Play music');
         }
