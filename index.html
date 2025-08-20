@@ -174,6 +174,9 @@
         pointer-events:none; z-index:0;
       }
   #stage canvas{ width:100% !important; height:100% !important; display:block; position:relative; z-index:1; background: transparent !important; }
+  /* Popcorn bucket art layer (shown in popcorn mode) */
+  #art-popcorn{ position:absolute; inset:0; z-index:0; pointer-events:none; display:none; }
+  #art-popcorn.show{ display:block; }
   .stage-footer{ display:flex; gap:10px; align-items:center; justify-content:space-between; padding:10px; border-top:1px solid #0000001a; background: var(--panel-2); }
       .left, .right{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
 
@@ -252,7 +255,7 @@
           <div class="field">
             <select id="mode" aria-label="Mode">
               <option value="bowl">Bowl (Physics)</option>
-              <option value="popcorn" disabled>Popcorn (coming soon)</option>
+              <option value="popcorn">Popcorn</option>
               <option value="wheel" disabled>Wheel (coming soon)</option>
             </select>
           </div>
@@ -276,7 +279,9 @@
 
     <main>
       <section class="stage-card">
-        <div id="stage"></div>
+        <div id="stage">
+          <svg id="art-popcorn" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
+        </div>
         <div class="overlay" id="overlay">
           <div class="winner" role="dialog" aria-live="polite">
             <img id="winner-img" alt="Winner avatar" />
@@ -333,6 +338,7 @@
           radius: 40,
           picking: false,
           lastPicked: null,
+          popcorn: { geom: null },
         };
 
         // ---------- UI ----------
@@ -350,6 +356,7 @@
   const btnMute = document.getElementById('btn-mute');
   const iconMusic = document.getElementById('icon-music');
   const iconMute = document.getElementById('icon-mute');
+  const artPopcorn = document.getElementById('art-popcorn');
 
         function setStatus(text){ app.statusPill.textContent = text; }
 
@@ -489,7 +496,7 @@
             img.src = src;
           });
         }
-        async function maskAvatarToCircle(src, size=80){
+  async function maskAvatarToCircle(src, size=80){
           const key = `${src}|${size}`;
           if(app.avatarCache.has(key)) return app.avatarCache.get(key);
           const img = await loadImage(src);
@@ -509,27 +516,74 @@
           return dataUrl;
         }
 
+        function makePopcornKernelTexture(avatarDataUrl, size=80){
+          // Cache by avatar data and size
+          const key = `kernel|${avatarDataUrl}|${size}`;
+          if(app.avatarCache.has(key)) return app.avatarCache.get(key);
+          const view = 80; // canonical path units
+          const stroke = 4;
+          const yellow = '#F5C542';
+          // A blobby popcorn-like path with 4 lobes
+          const pathD = `M40 8 C49 8 56 12 58 20 C66 20 73 26 73 35 C73 44 66 50 58 52 C56 60 49 64 40 64 C31 64 24 60 22 52 C14 50 7 44 7 35 C7 26 14 20 22 20 C24 12 31 8 40 8 Z`;
+          const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns='http://www.w3.org/2000/svg' width='${size}' height='${size}' viewBox='0 0 ${view} ${view}'>
+  <defs>
+    <clipPath id='clip'>
+      <path d='${pathD}' />
+    </clipPath>
+  </defs>
+  <rect width='100%' height='100%' fill='transparent'/>
+  <image href='${avatarDataUrl}' x='0' y='0' width='${view}' height='${view}' preserveAspectRatio='xMidYMid slice' clip-path='url(#clip)' />
+  <path d='${pathD}' fill='none' stroke='${yellow}' stroke-width='${stroke}' stroke-linejoin='round' />
+</svg>`;
+          const url = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+          app.avatarCache.set(key, url);
+          return url;
+        }
+
         // ---------- Bodies ----------
   function createParticipant(index, name, avatarSmall, avatarLarge){
           const r = app.radius;
-          const col = index % 8;
-          const row = Math.floor(index/8);
-          const startX = app.size.w/2 - Math.min(app.roster.length||7,8) * (r*2+6)/2;
-          const floorY = app.size.h - 80;
-          const x = startX + col*(r*2+6) + Common.random(-3,3);
-          const y = floorY - row*(r*2+10) - Common.random(0,6);
-          const body = Bodies.circle(x, y, r, {
-            restitution: 0.9,
-            friction: 0.02,
-            frictionAir: 0.01,
-            density: 0.0015,
-            render: {
-              opacity: 1,
-              sprite: { texture: avatarSmall, xScale: (r*2)/80, yScale: (r*2)/80 }
-            }
-          });
-          body.plugin = { participantIndex: index, avatarSmall, avatarLarge, name };
-          return body;
+          if(app.mode === 'popcorn' && app.popcorn?.geom){
+            const g = app.popcorn.geom;
+            // Distribute across top width, some peeking above the rim
+            const cols = Math.min(app.roster.length || 8, 8);
+            const col = index % cols;
+            const row = Math.floor(index/cols);
+            const topLeft = g.cx - g.topWidth/2;
+            const spacing = (g.topWidth - cols* (r*1.6)) / Math.max(1, cols-1);
+            const x = topLeft + col * ((r*1.6) + Math.max(0,spacing)) + (r*0.8) + Common.random(-3,3);
+            const y = g.topY + row * (r*1.4) + Common.random(-6,6) - 20; // start slightly above rim
+            const tex = makePopcornKernelTexture(avatarSmall, 80);
+            const body = Bodies.circle(x, y, r*0.9, {
+              restitution: 0.6,
+              friction: 0.05,
+              frictionAir: 0.015,
+              density: 0.0016,
+              render: { opacity: 1, sprite: { texture: tex, xScale: (r*2)/80, yScale: (r*2)/80 } }
+            });
+            body.plugin = { participantIndex: index, avatarSmall: tex, avatarLarge, name };
+            return body;
+          } else {
+            const col = index % 8;
+            const row = Math.floor(index/8);
+            const startX = app.size.w/2 - Math.min(app.roster.length||7,8) * (r*2+6)/2;
+            const floorY = app.size.h - 80;
+            const x = startX + col*(r*2+6) + Common.random(-3,3);
+            const y = floorY - row*(r*2+10) - Common.random(0,6);
+            const body = Bodies.circle(x, y, r, {
+              restitution: 0.9,
+              friction: 0.02,
+              frictionAir: 0.01,
+              density: 0.0015,
+              render: {
+                opacity: 1,
+                sprite: { texture: avatarSmall, xScale: (r*2)/80, yScale: (r*2)/80 }
+              }
+            });
+            body.plugin = { participantIndex: index, avatarSmall, avatarLarge, name };
+            return body;
+          }
         }
   function createBodiesFromRoster(){
           const bodies = [];
@@ -542,8 +596,10 @@
 
         // ---------- Modes ----------
         const modes = {
-          bowl: {
+      bowl: {
             setupWalls(){
+        // Hide popcorn art when not in popcorn mode
+        if(artPopcorn){ artPopcorn.classList.remove('show'); artPopcorn.innerHTML = ''; }
               const w = app.size.w, h = app.size.h;
               const thickness = 26;
               const cx = w/2;
@@ -606,7 +662,107 @@
               }, 60);
             }
           }
+          ,
+          popcorn: {
+            setupWalls(){
+              // Popcorn bucket as walls: create a tapered container
+              const w = app.size.w, h = app.size.h;
+              const cx = w/2;
+              const floorY = h - 40;
+              const topY = Math.max(80, Math.round(h*0.16));
+              const topWidth = Math.min(w*0.56, 680);
+              const bottomWidth = Math.min(w*0.30, 360);
+              const wallT = 24;
+
+              // Static floor
+              const floor = Bodies.rectangle(cx, floorY+200, w*2, 400, { isStatic:true, render:{visible:false} });
+
+              // Left and right tapered walls approximating bucket sides
+              const leftXTop = cx - topWidth/2;
+              const rightXTop = cx + topWidth/2;
+              const leftXBottom = cx - bottomWidth/2;
+              const rightXBottom = cx + bottomWidth/2;
+
+              const leftLen = Math.hypot(leftXBottom-leftXTop, floorY-topY);
+              const rightLen = Math.hypot(rightXTop-rightXBottom, floorY-topY);
+              const leftAngle = Math.atan2(floorY-topY, leftXBottom-leftXTop);
+              const rightAngle = Math.atan2(floorY-topY, rightXTop-rightXBottom);
+              const leftMid = { x: (leftXTop+leftXBottom)/2, y: (topY+floorY)/2 };
+              const rightMid = { x: (rightXTop+rightXBottom)/2, y: (topY+floorY)/2 };
+
+              const leftWall = Bodies.rectangle(leftMid.x, leftMid.y, leftLen, wallT, { isStatic:true, angle: leftAngle, render:{ fillStyle:'rgba(220,207,197,0.85)'} });
+              const rightWall = Bodies.rectangle(rightMid.x, rightMid.y, rightLen, wallT, { isStatic:true, angle: rightAngle, render:{ fillStyle:'rgba(220,207,197,0.85)'} });
+              const back = Bodies.rectangle(cx, -1000, w*2, 30, { isStatic:true, render:{ visible:false } });
+              app.walls = [floor, leftWall, rightWall, back];
+              World.add(app.world, app.walls);
+
+              // Draw decorative SVG bucket stripes behind (art layer)
+              drawPopcornBucketSVG(cx, topY, topWidth, floorY, bottomWidth);
+            },
+            shake(intensity=0.015, duration=260){
+              if(!app.participants.length) return;
+              const steps = Math.max(3, Math.round(duration/60));
+              let count = 0;
+              const id = setInterval(()=>{
+                count++;
+                for(const b of app.participants){
+                  try{ Sleeping.set(b, false); }catch(_){ }
+                  const base = intensity * (0.5 + Math.random()*0.8) * b.mass;
+                  const fx = (Math.random() - 0.5) * base * 1.2;
+                  const fy = -Math.abs(intensity*0.22) * (0.8 + Math.random()*0.6) * b.mass;
+                  Body.applyForce(b, b.position, { x: fx, y: fy });
+                  const jx = (Math.random()-0.5) * (intensity*1.8);
+                  const jy = -(intensity*0.9) * (0.8 + Math.random()*0.5);
+                  const nvx = b.velocity.x + jx;
+                  const nvy = b.velocity.y + jy;
+                  const maxSpeed = 3.8;
+                  const speed = Math.hypot(nvx, nvy);
+                  const scale = speed > maxSpeed ? (maxSpeed / speed) : 1;
+                  Body.setVelocity(b, { x: nvx*scale, y: nvy*scale });
+                  Body.setAngularVelocity(b, b.angularVelocity + (Math.random() - 0.5) * 0.25);
+                }
+                if(count >= steps) clearInterval(id);
+              }, 60);
+            }
+          }
         };
+
+        function drawPopcornBucketSVG(cx, topY, topW, floorY, bottomW){
+          if(!artPopcorn) return;
+          artPopcorn.innerHTML = '';
+          const w = app.size.w, h = app.size.h;
+          const svgNS = 'http://www.w3.org/2000/svg';
+          const g = document.createElementNS(svgNS, 'g');
+          artPopcorn.setAttribute('viewBox', `0 0 ${w} ${h}`);
+
+          // Bucket polygon
+          const leftXTop = cx - topW/2, rightXTop = cx + topW/2;
+          const leftXBottom = cx - bottomW/2, rightXBottom = cx + bottomW/2;
+          const bucket = document.createElementNS(svgNS, 'polygon');
+          bucket.setAttribute('points', `${leftXTop},${topY} ${rightXTop},${topY} ${rightXBottom},${floorY} ${leftXBottom},${floorY}`);
+          bucket.setAttribute('fill', '#FFFFFF');
+          bucket.setAttribute('stroke', '#C0392B');
+          bucket.setAttribute('stroke-width', '6');
+          g.appendChild(bucket);
+
+          // Vertical red stripes
+          const stripes = 7;
+          for(let i=0;i<stripes;i++){
+            const t = (i+0.5)/stripes; // center of stripe
+            const xTop = leftXTop + t * (rightXTop-leftXTop);
+            const xBottom = leftXBottom + t * (rightXBottom-leftXBottom);
+            const stripe = document.createElementNS(svgNS, 'polygon');
+            const halfStrip = (topW/stripes)*0.35;
+            const halfStripB = (bottomW/stripes)*0.35;
+            stripe.setAttribute('points', `${xTop-halfStrip},${topY} ${xTop+halfStrip},${topY} ${xBottom+halfStripB},${floorY} ${xBottom-halfStripB},${floorY}`);
+            stripe.setAttribute('fill', '#C0392B');
+            stripe.setAttribute('opacity', '0.9');
+            g.appendChild(stripe);
+          }
+
+          artPopcorn.appendChild(g);
+          artPopcorn.classList.add('show');
+        }
 
         // ---------- Engine ----------
         function addSceneStatics(){
@@ -664,6 +820,18 @@
         async function regenerate(clearHistory=true){
           if(app.engine){ World.clear(app.world, false); app.participants = []; app.walls = []; }
           addSceneStatics();
+          // Precompute popcorn geometry for placement
+          if(app.mode === 'popcorn'){
+            const w = app.size.w, h = app.size.h;
+            const cx = w/2;
+            const floorY = h - 40;
+            const topY = Math.max(80, Math.round(h*0.16));
+            const topWidth = Math.min(w*0.56, 680);
+            const bottomWidth = Math.min(w*0.30, 360);
+            app.popcorn.geom = { cx, topY, floorY, topWidth, bottomWidth };
+          } else {
+            app.popcorn.geom = null;
+          }
           modes[app.mode].setupWalls();
           // Ensure all roster avatars are masked at both sizes
           for(const p of app.roster){
@@ -737,26 +905,31 @@
           if(!app.participants.length){ setStatus('No one left to pick'); return; }
           app.picking = true; setStatus('Picking…');
 
-          // 3 quick shakes with visual rumble
+          // 3 quick shakes with visual rumble (gentler for popcorn)
           const card = document.querySelector('.stage-card');
           for(let i=0;i<3;i++){
-            modes[app.mode].shake(0.02, 180);
-            if(card){ card.classList.add('rumble'); setTimeout(()=> card.classList.remove('rumble'), 240); }
-            await wait(220);
+            const s = app.mode === 'popcorn' ? 0.015 : 0.02;
+            const d = app.mode === 'popcorn' ? 160 : 180;
+            modes[app.mode].shake(s, d);
+            if(card){ card.classList.add('rumble'); setTimeout(()=> card.classList.remove('rumble'), d + 60); }
+            await wait(200);
           }
 
           // Choose and eject in one smooth motion
           const idx = Math.floor(Math.random() * app.participants.length);
           const chosen = app.participants[idx];
           try{ Sleeping.set(chosen, false); }catch(_){ }
-          const upward = 0.09 * chosen.mass;
-          const sideways = (Math.random() < 0.5 ? -1 : 1) * 0.035 * chosen.mass;
+          const upward = (app.mode === 'popcorn' ? 0.08 : 0.09) * chosen.mass;
+          const sidewaysScale = app.mode === 'popcorn' ? 0.03 : 0.035;
+          const sideways = (Math.random() < 0.5 ? -1 : 1) * sidewaysScale * chosen.mass;
           Body.applyForce(chosen, chosen.position, { x: sideways, y: -upward });
           // Give an immediate velocity boost for a clean arc
-          Body.setVelocity(chosen, { x: chosen.velocity.x + (sideways>0? 3.2:-3.2), y: chosen.velocity.y - 5.0 });
-          Body.setAngularVelocity(chosen, chosen.angularVelocity + (Math.random() - 0.5) * 0.7);
+          const vxBoost = app.mode === 'popcorn' ? 2.8 : 3.2;
+          const vyBoost = app.mode === 'popcorn' ? 4.4 : 5.0;
+          Body.setVelocity(chosen, { x: chosen.velocity.x + (sideways>0? vxBoost:-vxBoost), y: chosen.velocity.y - vyBoost });
+          Body.setAngularVelocity(chosen, chosen.angularVelocity + (Math.random() - 0.5) * 0.6);
 
-          const thresholdY = app.size.h * 0.28;
+          const thresholdY = app.mode === 'popcorn' ? app.size.h * 0.18 : app.size.h * 0.28;
           const start = Date.now();
           const maxMs = 1800;
           let done = false;
