@@ -131,6 +131,11 @@
         justify-content: center;
         font-size: 18px; /* icon size */
         line-height: 1;
+  /* secondary style overrides */
+  background: transparent !important;
+  border: 1px solid #0A3913 !important;
+  box-shadow: none !important;
+  color: #0A3913;
       }
       /* Button icon images */
       #btn-music img,
@@ -139,7 +144,12 @@
         height: 16px;
         display: block;
         pointer-events: none; /* don't intercept clicks */
+        /* make monochrome SVGs appear dark green via filter */
+        filter: invert(15%) sepia(24%) saturate(749%) hue-rotate(75deg) brightness(93%) contrast(94%);
       }
+      /* subtle hover for secondary icon buttons */
+      #btn-music.btn.small:hover,
+      #btn-mute.btn.small:hover{ background: rgba(10,57,19,0.06) !important; }
 
       main{ display:grid; grid-template-columns: 1fr 300px; gap:14px; padding:14px; }
       @media (max-width: 1000px){ main{ grid-template-columns: 1fr; } }
