@@ -231,10 +231,10 @@
             <input id="strength" type="range" min="1" max="10" value="5" />
           </div>
           <div class="field">
-            <button id="btn-music" class="btn small" title="Play background music" aria-pressed="false">▶ Play music</button>
+            <button id="btn-music" class="btn small" title="Play background music" aria-pressed="false" aria-label="Play music">▶</button>
           </div>
           <div class="field">
-            <button id="btn-mute" class="btn small" title="Mute all sound" aria-pressed="false">🔊 Mute</button>
+            <button id="btn-mute" class="btn small" title="Mute all sound" aria-pressed="false" aria-label="Mute">🔊</button>
           </div>
         </div>
       </div>
@@ -334,8 +334,9 @@
         function setMuteButton(muted){
           if(!btnMute) return;
           btnMute.setAttribute('aria-pressed', muted ? 'true' : 'false');
-          btnMute.textContent = muted ? '🔈 Unmute' : '🔊 Mute';
+          btnMute.textContent = muted ? '🔈' : '🔊';
           btnMute.title = muted ? 'Unmute all sound' : 'Mute all sound';
+          btnMute.setAttribute('aria-label', muted ? 'Unmute' : 'Mute');
         }
         function applyAudioState(){
           if(rattleAudio){ rattleAudio.volume = masterVolume; rattleAudio.muted = isMuted; }
@@ -382,8 +383,9 @@
         function setMusicButton(playing){
           if(!btnMusic) return;
           btnMusic.setAttribute('aria-pressed', playing ? 'true' : 'false');
-          btnMusic.textContent = playing ? '⏸ Pause music' : '▶ Play music';
+          btnMusic.textContent = playing ? '⏸' : '▶';
           btnMusic.title = playing ? 'Pause background music' : 'Play background music';
+          btnMusic.setAttribute('aria-label', playing ? 'Pause music' : 'Play music');
         }
         async function startMusic(auto=false){
           const a = ensureBgMusic();
