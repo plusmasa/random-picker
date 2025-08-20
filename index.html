@@ -686,7 +686,8 @@
               const leftLen = Math.hypot(leftXBottom-leftXTop, floorY-topY);
               const rightLen = Math.hypot(rightXTop-rightXBottom, floorY-topY);
               const leftAngle = Math.atan2(floorY-topY, leftXBottom-leftXTop);
-              const rightAngle = Math.atan2(floorY-topY, rightXTop-rightXBottom);
+              // Use bottom - top for dx so the wall leans the same way as the SVG bucket edge
+              const rightAngle = Math.atan2(floorY-topY, rightXBottom - rightXTop);
               const leftMid = { x: (leftXTop+leftXBottom)/2, y: (topY+floorY)/2 };
               const rightMid = { x: (rightXTop+rightXBottom)/2, y: (topY+floorY)/2 };
 
