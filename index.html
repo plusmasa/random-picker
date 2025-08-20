@@ -179,10 +179,19 @@
           url('bkgdCity.jpg'),
           url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 800'%3E%3Cdefs%3E%3CradialGradient id='g' cx='70%25' cy='18%25' r='65%25'%3E%3Cstop offset='0' stop-color='%2386BBD8' stop-opacity='.28'/%3E%3Cstop offset='1' stop-color='%23FFFFFF' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='1200' height='800' fill='%23FAF3ED'/%3E%3Ccircle cx='980' cy='90' r='460' fill='url(%23g)'/%3E%3Cellipse cx='220' cy='760' rx='420' ry='180' fill='%236DA67A' fill-opacity='.08'/%3E%3C/svg%3E");
       }
+      /* Wheel mode: seats background */
+      #stage.mode-wheel::before{
+        background-image:
+          url('bkgdSeats.jpg'),
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 800'%3E%3Cdefs%3E%3CradialGradient id='g' cx='70%25' cy='18%25' r='65%25'%3E%3Cstop offset='0' stop-color='%2386BBD8' stop-opacity='.28'/%3E%3Cstop offset='1' stop-color='%23FFFFFF' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='1200' height='800' fill='%23FAF3ED'/%3E%3Ccircle cx='980' cy='90' r='460' fill='url(%23g)'/%3E%3Cellipse cx='220' cy='760' rx='420' ry='180' fill='%236DA67A' fill-opacity='.08'/%3E%3C/svg%3E");
+      }
   #stage canvas{ width:100% !important; height:100% !important; display:block; position:relative; z-index:1; background: transparent !important; }
   /* Popcorn bucket art layer (shown in popcorn mode) */
   #art-popcorn{ position:absolute; inset:0; z-index:0; pointer-events:none; display:none; }
   #art-popcorn.show{ display:block; }
+  /* Wheel art layer (shown in wheel mode) */
+  #art-wheel{ position:absolute; inset:0; z-index:2; pointer-events:none; display:none; }
+  #art-wheel.show{ display:block; }
   .stage-footer{ display:flex; gap:10px; align-items:center; justify-content:space-between; padding:10px; border-top:1px solid #0000001a; background: var(--panel-2); }
       .left, .right{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
 
@@ -199,6 +208,8 @@
 
   .overlay{ position:absolute; inset:0; display:none; align-items:center; justify-content:center; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); z-index:2; }
       .overlay.show{ display:flex; }
+  /* Confetti canvas sits behind the winner modal inside the overlay */
+  #confetti-canvas{ position:absolute; inset:0; z-index:2; pointer-events:none; }
       .winner{
         display:flex; flex-direction:column; align-items:center; gap:12px; padding:18px; border-radius:16px; border:1px solid #0000001a;
         background: radial-gradient(300px 140px at 50% 0%, rgba(134,187,216,0.18), transparent), #FFFFFFEE; box-shadow: var(--shadow);
@@ -262,7 +273,7 @@
             <select id="mode" aria-label="Mode">
               <option value="bowl">Bowl (Physics)</option>
               <option value="popcorn">Popcorn</option>
-              <option value="wheel" disabled>Wheel (coming soon)</option>
+              <option value="wheel">Wheel</option>
             </select>
           </div>
           <div class="field">
@@ -287,12 +298,13 @@
       <section class="stage-card">
         <div id="stage">
           <svg id="art-popcorn" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
+          <svg id="art-wheel" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
         </div>
         <div class="overlay" id="overlay">
           <div class="winner" role="dialog" aria-live="polite">
             <img id="winner-img" alt="Winner avatar" />
             <div class="title" id="winner-title">Picked!</div>
-            <div class="sub" id="winner-sub">They are removed from the bowl.</div>
+            <div class="sub" id="winner-sub">You're up!</div>
             <div class="row-8">
               <button id="btn-continue" class="btn accent">Continue</button>
               <button id="btn-undo" class="btn">Undo</button>
@@ -345,6 +357,7 @@
           picking: false,
           lastPicked: null,
           popcorn: { geom: null },
+          wheel: { angle: 0, spinning: false, rotor: null, entries: [] },
         };
 
         // ---------- UI ----------
@@ -363,6 +376,7 @@
   const iconMusic = document.getElementById('icon-music');
   const iconMute = document.getElementById('icon-mute');
   let artPopcorn = document.getElementById('art-popcorn');
+  let artWheel = document.getElementById('art-wheel');
 
         function setStatus(text){ app.statusPill.textContent = text; }
 
@@ -389,8 +403,20 @@
         }
         function applyAudioState(){
           if(rattleAudio){ rattleAudio.volume = masterVolume; rattleAudio.muted = isMuted; }
+          if(spinAudio){ spinAudio.volume = masterVolume; spinAudio.muted = isMuted; }
+          if(typeof popcornAudio !== 'undefined' && popcornAudio){ popcornAudio.volume = masterVolume; popcornAudio.muted = isMuted; }
           if(bgAudio){ bgAudio.volume = masterVolume; bgAudio.muted = isMuted; }
           setMuteButton(isMuted);
+        }
+
+        // ---------- Controls per mode ----------
+        function updateControlsForMode(){
+          const isWheel = app.mode === 'wheel';
+          if(btnShake){
+            btnShake.disabled = isWheel;
+            btnShake.title = isWheel ? 'Shake is disabled in Wheel mode' : 'Shake';
+          }
+          if(strengthRange){ strengthRange.disabled = isWheel; }
         }
 
         // ---------- Audio (Rattle) ----------
@@ -408,6 +434,46 @@
           try{
             const a = getRattle();
             // Restart if already playing for crisp feedback on repeated clicks
+            if(!a.paused){ a.currentTime = 0; }
+            const p = a.play();
+            if(p && typeof p.catch === 'function') p.catch(()=>{});
+          }catch(_){ /* ignore audio errors */ }
+        }
+
+        // ---------- Audio (Wheel Spin) ----------
+        let spinAudio = null;
+        function getSpin(){
+          if(!spinAudio){
+            spinAudio = new Audio('Sounds/spin.mp3');
+            spinAudio.preload = 'auto';
+            spinAudio.volume = masterVolume;
+            spinAudio.muted = isMuted;
+          }
+          return spinAudio;
+        }
+        function playSpin(){
+          try{
+            const a = getSpin();
+            if(!a.paused){ a.currentTime = 0; }
+            const p = a.play();
+            if(p && typeof p.catch === 'function') p.catch(()=>{});
+          }catch(_){ /* ignore audio errors */ }
+        }
+
+        // ---------- Audio (Popcorn) ----------
+        let popcornAudio = null;
+        function getPopcorn(){
+          if(!popcornAudio){
+            popcornAudio = new Audio('Sounds/popcorn.mp3');
+            popcornAudio.preload = 'auto';
+            popcornAudio.volume = masterVolume;
+            popcornAudio.muted = isMuted;
+          }
+          return popcornAudio;
+        }
+        function playPopcorn(){
+          try{
+            const a = getPopcorn();
             if(!a.paused){ a.currentTime = 0; }
             const p = a.play();
             if(p && typeof p.catch === 'function') p.catch(()=>{});
@@ -605,7 +671,8 @@
       bowl: {
             setupWalls(){
         // Hide popcorn art when not in popcorn mode
-        if(artPopcorn){ artPopcorn.classList.remove('show'); artPopcorn.innerHTML = ''; }
+  if(artPopcorn){ artPopcorn.classList.remove('show'); artPopcorn.innerHTML = ''; }
+  if(artWheel){ artWheel.classList.remove('show'); artWheel.innerHTML = ''; }
               const w = app.size.w, h = app.size.h;
               const thickness = 26;
               const cx = w/2;
@@ -672,6 +739,7 @@
           popcorn: {
             setupWalls(){
               // Popcorn bucket as walls: create a tapered container
+              if(artWheel){ artWheel.classList.remove('show'); artWheel.innerHTML = ''; }
               const w = app.size.w, h = app.size.h;
               const cx = w/2;
               const floorY = h - 40;
@@ -731,6 +799,15 @@
                 if(count >= steps) clearInterval(id);
               }, 60);
             }
+          }
+          ,
+          wheel: {
+            setupWalls(){
+              // Hide popcorn, draw wheel art; no physics walls needed
+              if(artPopcorn){ artPopcorn.classList.remove('show'); }
+              drawWheelSVG();
+            },
+            shake(){ /* disabled in wheel mode */ }
           }
         };
 
@@ -838,7 +915,7 @@
           app.size.w = Math.max(600, Math.floor(rect.width || 900));
           app.size.h = Math.max(520, Math.floor(rect.height || 560));
 
-      // Recreate the popcorn art SVG layer (cleared when we reset the stage)
+      // Recreate the popcorn and wheel art SVG layers (cleared when we reset the stage)
       {
         const svgNS = 'http://www.w3.org/2000/svg';
         artPopcorn = document.createElementNS(svgNS, 'svg');
@@ -847,6 +924,13 @@
         artPopcorn.setAttribute('preserveAspectRatio', 'xMidYMid meet');
         artPopcorn.setAttribute('aria-hidden', 'true');
         app.stageEl.appendChild(artPopcorn);
+
+        artWheel = document.createElementNS(svgNS, 'svg');
+        artWheel.setAttribute('id', 'art-wheel');
+        artWheel.setAttribute('viewBox', `0 0 ${app.size.w} ${app.size.h}`);
+        artWheel.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        artWheel.setAttribute('aria-hidden', 'true');
+        app.stageEl.appendChild(artWheel);
       }
 
       app.render = Render.create({
@@ -882,13 +966,21 @@
         }
 
         // ---------- Actions ----------
+        function poolCount(){
+          if(app.mode === 'wheel') return Math.max(0, (app.roster?.length||0) - (app.selected?.length||0));
+          return app.participants?.length || 0;
+        }
+        function poolNoun(){
+          return app.mode === 'wheel' ? 'in wheel' : (app.mode === 'popcorn' ? 'in bucket' : 'in bowl');
+        }
+
         async function regenerate(clearHistory=true){
           if(app.engine){ World.clear(app.world, false); app.participants = []; app.walls = []; }
           addSceneStatics();
           // Toggle stage background by mode
           if(app.stageEl){
-            app.stageEl.classList.remove('mode-bowl','mode-popcorn');
-            app.stageEl.classList.add(app.mode === 'popcorn' ? 'mode-popcorn' : 'mode-bowl');
+            app.stageEl.classList.remove('mode-bowl','mode-popcorn','mode-wheel');
+            app.stageEl.classList.add(app.mode === 'popcorn' ? 'mode-popcorn' : (app.mode === 'wheel' ? 'mode-wheel' : 'mode-bowl'));
           }
           // Precompute popcorn geometry for placement
           if(app.mode === 'popcorn'){
@@ -918,11 +1010,17 @@
             if(!p.avatarLarge) p.avatarLarge = p.avatarSmall;
             if(!p.avatarSmall && p.name){ p.avatarSmall = makeAvatarDataURL(app.roster.indexOf(p), 80); }
           }
-          const bodies = createBodiesFromRoster();
-          World.add(app.world, bodies);
-          app.participants = bodies;
+          if(app.mode !== 'wheel'){
+            const bodies = createBodiesFromRoster();
+            World.add(app.world, bodies);
+            app.participants = bodies;
+          } else {
+            app.participants = [];
+            drawWheelSVG();
+          }
           if(clearHistory){ app.selected = []; renderSelectedList(); }
-          setStatus(`Ready • ${app.participants.length} in bowl`);
+          updateControlsForMode();
+          setStatus(`Ready • ${poolCount()} ${poolNoun()}`);
         }
         function renderSelectedList(){
           app.selectedListEl.innerHTML = '';
@@ -933,7 +1031,7 @@
             app.selectedListEl.appendChild(el);
           }
         }
-        async function addName(){
+  async function addName(){
           const raw = (nameInput.value||'').trim();
           if(!raw){ setStatus('Enter a name'); nameInput.focus(); return; }
           if(app.roster.find(p=> p.name.toLowerCase()===raw.toLowerCase())){ setStatus('Name already added'); nameInput.select(); return; }
@@ -952,15 +1050,22 @@
           }
           const person = { name: raw, src: avatarSrc, avatarSmall: maskedSmall, avatarLarge: maskedLarge };
           app.roster.push(person);
-          // Physically add the new body
-          const body = createParticipant(app.participants.length, person.name, person.avatarSmall, person.avatarLarge);
-          Body.setPosition(body, { x: app.size.w/2 + Common.random(-40,40), y: app.size.h*0.2 });
-          World.add(app.world, body);
-          app.participants.push(body);
+          if(app.mode !== 'wheel'){
+            const body = createParticipant(app.participants.length, person.name, person.avatarSmall, person.avatarLarge);
+            Body.setPosition(body, { x: app.size.w/2 + Common.random(-40,40), y: app.size.h*0.2 });
+            World.add(app.world, body);
+            app.participants.push(body);
+          } else {
+            drawWheelSVG();
+          }
           nameInput.value = '';
-          setStatus(`Added ${person.name} • ${app.participants.length} in bowl`);
+          setStatus(`Added ${person.name} • ${poolCount()} ${poolNoun()}`);
         }
         function shake(){
+          if(app.mode === 'wheel'){
+            setStatus('Wheel mode • Shake disabled');
+            return;
+          }
           const level = Math.max(1, Math.min(10, Number(strengthRange?.value || 5)));
           const intensity = 0.012 + (level-1) * (0.028/9); // 0.012..0.04
           const duration = 360 + (level-1) * (240/9); // 360..600ms
@@ -968,10 +1073,15 @@
           const card = document.querySelector('.stage-card');
           if(card){ card.classList.add('rumble'); setTimeout(()=> card.classList.remove('rumble'), duration + 120); }
           setStatus('Shaking…');
-          setTimeout(()=> setStatus(`Ready • ${app.participants.length} in bowl`), 800);
+          setTimeout(()=> setStatus(`Ready • ${poolCount()} ${poolNoun()}`), 800);
         }
         async function pickNext(){
           if(app.picking) return;
+          if(app.mode === 'wheel'){
+            const entries = app.roster.filter(p => !app.selected.some(s => s.name === p.name));
+            if(!entries.length){ setStatus('No one left to pick'); return; }
+            return spinWheelAndPick(entries);
+          }
           if(!app.participants.length){ setStatus('No one left to pick'); return; }
           app.picking = true; setStatus('Picking…');
 
@@ -1026,30 +1136,245 @@
           const avatarLarge = body.plugin?.avatarLarge || avatarSmall;
           const picked = { name, avatar: avatarSmall };
           app.selected.push(picked); renderSelectedList();
-          app.winnerImgEl.src = avatarLarge; app.winnerTitleEl.textContent = name; app.overlayEl.classList.add('show');
+          app.winnerImgEl.src = avatarLarge; app.winnerTitleEl.textContent = name; app.overlayEl.classList.add('show'); startConfetti();
           app.lastPicked = { name }; app.picking = false; setStatus(`Picked ${name} • ${app.participants.length} left`);
         }
-        function continueAfterPick(){ app.overlayEl.classList.remove('show'); }
+        function finalizePickWheel(person){
+          const name = person.name;
+          const avatarSmall = person.avatarSmall;
+          const avatarLarge = person.avatarLarge || avatarSmall;
+          const picked = { name, avatar: avatarSmall };
+          app.selected.push(picked); renderSelectedList();
+          app.winnerImgEl.src = avatarLarge; app.winnerTitleEl.textContent = name; app.overlayEl.classList.add('show'); startConfetti();
+          app.lastPicked = { name }; app.picking = false; setStatus(`Picked ${name} • ${poolCount()} ${poolNoun()}`);
+          drawWheelSVG();
+        }
+  function continueAfterPick(){ app.overlayEl.classList.remove('show'); stopConfetti(); }
         function undoLast(){
           app.overlayEl.classList.remove('show'); if(!app.lastPicked) return;
           const i = app.selected.findIndex(s=> s.name === app.lastPicked.name);
           if(i !== -1){
-            const restoredIndex = app.participants.length;
-            // Find the roster person to restore textures
-            const person = app.roster.find(p=> p.name === app.lastPicked.name);
-            const small = person?.avatarSmall || app.selected[i].avatar;
-            const large = person?.avatarLarge || small;
-            const body = createParticipant(restoredIndex, person?.name || app.lastPicked.name, small, large);
-            Body.setPosition(body, { x: app.size.w/2, y: app.size.h*0.2 });
-            World.add(app.world, body);
-            app.participants.push(body);
-            app.selected.splice(i,1);
-            renderSelectedList();
-            setStatus(`Undo • ${app.participants.length} in bowl`);
+            if(app.mode === 'wheel'){
+              app.selected.splice(i,1);
+              renderSelectedList();
+              drawWheelSVG();
+              setStatus(`Undo • ${poolCount()} ${poolNoun()}`);
+            } else {
+              const restoredIndex = app.participants.length;
+              const person = app.roster.find(p=> p.name === app.lastPicked.name);
+              const small = person?.avatarSmall || app.selected[i].avatar;
+              const large = person?.avatarLarge || small;
+              const body = createParticipant(restoredIndex, person?.name || app.lastPicked.name, small, large);
+              Body.setPosition(body, { x: app.size.w/2, y: app.size.h*0.2 });
+              World.add(app.world, body);
+              app.participants.push(body);
+              app.selected.splice(i,1);
+              renderSelectedList();
+              setStatus(`Undo • ${poolCount()} ${poolNoun()}`);
+            }
           }
           app.lastPicked = null;
         }
-        function resetAll(){ app.overlayEl.classList.remove('show'); setupEngine(); regenerate(true); setStatus('Reset'); }
+  function resetAll(){ app.overlayEl.classList.remove('show'); stopConfetti(); setupEngine(); regenerate(true); setStatus('Reset'); }
+
+        // ---------- Confetti (beige & green) ----------
+        const confetti = { canvas:null, ctx:null, pieces:[], raf:null, running:false };
+        function startConfetti(){
+          try{ stopConfetti(); }catch(_){ }
+          const overlay = app.overlayEl; if(!overlay) return;
+          const canvas = document.createElement('canvas');
+          canvas.id = 'confetti-canvas';
+          const dpi = Math.max(1, Math.min(2, window.devicePixelRatio||1));
+          const rect = overlay.getBoundingClientRect();
+          canvas.style.width = rect.width + 'px';
+          canvas.style.height = rect.height + 'px';
+          canvas.width = Math.floor(rect.width * dpi);
+          canvas.height = Math.floor(rect.height * dpi);
+          overlay.appendChild(canvas);
+          const ctx = canvas.getContext('2d');
+          ctx.scale(dpi, dpi);
+          confetti.canvas = canvas; confetti.ctx = ctx; confetti.pieces = []; confetti.running = true;
+
+          const colors = ['#FAF3ED', '#FFF7F1', '#6DA67A', '#0A3913'];
+          const W = rect.width, H = rect.height;
+          // Emitter origin: center of the winner popup within the overlay
+          const win = overlay.querySelector('.winner');
+          const wrect = win ? win.getBoundingClientRect() : { left: rect.left + W/2-1, top: rect.top + H/2-1, width: 2, height: 2 };
+          const ox = (wrect.left - rect.left) + (wrect.width/2);
+          const oy = (wrect.top - rect.top) + (wrect.height/2);
+
+          const N = Math.round(Math.min(200, Math.max(90, (W*H)/11000)));
+          for(let i=0;i<N;i++){
+            // Radial burst from popup center with slight jitter
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 2.2 + Math.random() * 4.2;
+            const jitterR = Math.random()*6;
+            const jitterA = Math.random()*Math.PI*2;
+            confetti.pieces.push({
+              x: ox + Math.cos(jitterA)*jitterR,
+              y: oy + Math.sin(jitterA)*jitterR,
+              w: 6 + Math.random()*6,
+              h: 10 + Math.random()*10,
+              vx: Math.cos(angle) * speed,
+              vy: Math.sin(angle) * speed,
+              rot: Math.random()*Math.PI*2,
+              vr: (-0.25 + Math.random()*0.5),
+              color: colors[Math.floor(Math.random()*colors.length)],
+              ttl: 2000 + Math.random()*1200
+            });
+          }
+
+          const g = 0.055; const drag = 0.992; const start = performance.now();
+          const step = (now)=>{
+            if(!confetti.running) return;
+            const t = now - start;
+            if(t > 2600 && confetti.pieces.length === 0){ stopConfetti(); return; }
+            const ctx2 = confetti.ctx; if(!ctx2) return;
+            ctx2.clearRect(0,0,W,H);
+            // Draw
+            for(let i=confetti.pieces.length-1;i>=0;i--){
+              const p = confetti.pieces[i];
+              p.vy += g; p.vx *= drag; p.vy *= drag;
+              p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+              p.ttl -= 16.7;
+              if(p.y > H + 40 || p.ttl <= 0){ confetti.pieces.splice(i,1); continue; }
+              ctx2.save();
+              ctx2.translate(p.x, p.y);
+              ctx2.rotate(p.rot);
+              ctx2.fillStyle = p.color;
+              ctx2.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+              ctx2.restore();
+            }
+            confetti.raf = requestAnimationFrame(step);
+          };
+          confetti.raf = requestAnimationFrame(step);
+        }
+        function stopConfetti(){
+          confetti.running = false;
+          if(confetti.raf) cancelAnimationFrame(confetti.raf);
+          confetti.raf = null;
+          if(confetti.canvas && confetti.canvas.parentNode){ confetti.canvas.parentNode.removeChild(confetti.canvas); }
+          confetti.canvas = null; confetti.ctx = null; confetti.pieces = [];
+        }
+
+        // ---------- Wheel (SVG) ----------
+        function drawWheelSVG(){
+          if(!artWheel) return;
+          const w = app.size.w, h = app.size.h;
+          artWheel.setAttribute('viewBox', `0 0 ${w} ${h}`);
+          artWheel.innerHTML = '';
+          const entries = app.roster.filter(p => !app.selected.some(s => s.name === p.name));
+          app.wheel.entries = entries;
+          const cx = Math.round(w/2), cy = Math.round(h/2 + Math.min(60, h*0.06));
+          const R = Math.min(w,h) * 0.32;
+          const labelR = R * 0.72;
+          const hubR = Math.max(18, Math.min(26, R*0.12));
+          const svgNS = 'http://www.w3.org/2000/svg';
+          const root = document.createElementNS(svgNS, 'g');
+          const rotor = document.createElementNS(svgNS, 'g');
+          rotor.setAttribute('id', 'wheel-rotor');
+          rotor.setAttribute('transform', `rotate(${app.wheel.angle||0}, ${cx}, ${cy})`);
+          app.wheel.rotor = rotor;
+          const N = entries.length;
+          if(N > 0){
+            const slice = (Math.PI*2)/N;
+            const colors = ['#F6D365','#FDA085','#86BBD8','#6DA67A','#FFD166','#C7F36B'];
+            for(let i=0;i<N;i++){
+              const a0 = -Math.PI/2 + i*slice;
+              const a1 = a0 + slice;
+              const x0 = cx + R*Math.cos(a0), y0 = cy + R*Math.sin(a0);
+              const x1 = cx + R*Math.cos(a1), y1 = cy + R*Math.sin(a1);
+              const largeArc = slice > Math.PI ? 1 : 0;
+              const path = document.createElementNS(svgNS, 'path');
+              const d = `M ${cx},${cy} L ${x0},${y0} A ${R},${R} 0 ${largeArc} 1 ${x1},${y1} Z`;
+              path.setAttribute('d', d);
+              path.setAttribute('fill', colors[i % colors.length]);
+              path.setAttribute('fill-opacity', '0.9');
+              path.setAttribute('stroke', '#ffffff');
+              path.setAttribute('stroke-opacity', '0.35');
+              path.setAttribute('stroke-width', '2');
+              rotor.appendChild(path);
+              // Avatar at mid-angle
+              const am = a0 + slice/2;
+              const ax = cx + labelR*Math.cos(am);
+              const ay = cy + labelR*Math.sin(am);
+              const avatarSize = Math.max(36, Math.min(56, R*0.26));
+              const clipId = `wheel-clip-${i}`;
+              const defs = document.createElementNS(svgNS, 'defs');
+              const clip = document.createElementNS(svgNS, 'clipPath');
+              clip.setAttribute('id', clipId);
+              const clipCircle = document.createElementNS(svgNS, 'circle');
+              clipCircle.setAttribute('cx', ax);
+              clipCircle.setAttribute('cy', ay);
+              clipCircle.setAttribute('r', avatarSize/2);
+              clip.appendChild(clipCircle);
+              defs.appendChild(clip);
+              root.appendChild(defs);
+              const img = document.createElementNS(svgNS, 'image');
+              img.setAttribute('href', entries[i].avatarSmall);
+              img.setAttribute('x', ax - avatarSize/2);
+              img.setAttribute('y', ay - avatarSize/2);
+              img.setAttribute('width', avatarSize);
+              img.setAttribute('height', avatarSize);
+              img.setAttribute('clip-path', `url(#${clipId})`);
+              rotor.appendChild(img);
+            }
+          }
+          const ring = document.createElementNS(svgNS, 'circle');
+          ring.setAttribute('cx', cx); ring.setAttribute('cy', cy); ring.setAttribute('r', R);
+          ring.setAttribute('fill', 'none');
+          ring.setAttribute('stroke', '#0A3913');
+          ring.setAttribute('stroke-width', '6');
+          rotor.appendChild(ring);
+          const hub = document.createElementNS(svgNS, 'circle');
+          hub.setAttribute('cx', cx); hub.setAttribute('cy', cy); hub.setAttribute('r', hubR);
+          hub.setAttribute('fill', '#0A3913');
+          hub.setAttribute('stroke', '#FFFFFF');
+          hub.setAttribute('stroke-width', '3');
+          rotor.appendChild(hub);
+          const pointer = document.createElementNS(svgNS, 'polygon');
+          const tipX = cx, tipY = cy - R + 6; // overlap the wheel slightly
+          const baseY = tipY - 28;
+          const baseHalf = 10;
+          pointer.setAttribute('points', `${tipX},${tipY} ${tipX-baseHalf},${baseY} ${tipX+baseHalf},${baseY}`);
+          pointer.setAttribute('fill', '#0A3913');
+          pointer.setAttribute('stroke', '#0A3913');
+          pointer.setAttribute('stroke-width', '2');
+          root.appendChild(rotor);
+          root.appendChild(pointer);
+          artWheel.appendChild(root);
+          artWheel.classList.add('show');
+        }
+
+        async function spinWheelAndPick(entries){
+          if(app.wheel.spinning) return;
+          const N = entries.length;
+          if(!N) { setStatus('No one left to pick'); return; }
+          const winnerIndex = Math.floor(Math.random() * N);
+          const sliceDeg = 360 / N;
+          const baseTarget = - (winnerIndex + 0.5) * sliceDeg; // pointer at 12 o'clock
+          const spins = 4;
+          let target = baseTarget + spins*360;
+          const current = app.wheel.angle || 0;
+          while(target <= current + 180) target += 360;
+          const duration = Math.max(1800, Math.min(4200, 2400 + Math.random()*1200));
+          const start = performance.now();
+          const startAngle = current;
+          const delta = target - startAngle;
+          app.wheel.spinning = true; app.picking = true; setStatus('Spinning…');
+          const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+          const cx = Math.round(app.size.w/2), cy = Math.round(app.size.h/2 + Math.min(60, app.size.h*0.06));
+          const step = (now)=>{
+            const t = Math.min(1, (now - start) / duration);
+            const eased = easeOutCubic(t);
+            const angle = startAngle + delta * eased;
+            app.wheel.angle = angle;
+            if(app.wheel.rotor){ app.wheel.rotor.setAttribute('transform', `rotate(${angle}, ${cx}, ${cy})`); }
+            if(t < 1){ requestAnimationFrame(step); }
+            else{ app.wheel.spinning = false; finalizePickWheel(entries[winnerIndex]); }
+          };
+          requestAnimationFrame(step);
+        }
 
         // ---------- Wire UI ----------
         btnAddName.addEventListener('click', () => { addName(); });
@@ -1060,12 +1385,22 @@
           app.avatarPool = AVATAR_FILES.slice(); app.avatarCache = new Map(); renderSelectedList();
           regenerate(true); setStatus('Cleared names');
         });
-  btnShake.addEventListener('click', () => { playRattle(); shake(); });
-  btnPick.addEventListener('click', () => { playRattle(); pickNext(); });
+  btnShake.addEventListener('click', () => {
+    if(app.mode === 'popcorn') playPopcorn();
+    else if(app.mode === 'wheel') {/* disabled */}
+    else playRattle();
+    shake();
+  });
+  btnPick.addEventListener('click', () => {
+    if(app.mode === 'wheel') playSpin();
+    else if(app.mode === 'popcorn') playPopcorn();
+    else playRattle();
+    pickNext();
+  });
         btnReset.addEventListener('click', resetAll);
         btnContinue.addEventListener('click', continueAfterPick);
         btnUndo.addEventListener('click', undoLast);
-  modeSelect.addEventListener('change', (e)=>{ app.mode = e.target.value; resetAll(); });
+  modeSelect.addEventListener('change', (e)=>{ app.mode = e.target.value; resetAll(); updateControlsForMode(); });
   // Music toggle
   btnMusic?.addEventListener('click', async () => {
     const a = ensureBgMusic();
@@ -1079,8 +1414,9 @@
   // Note: Global keyboard shortcuts removed to prevent accidental actions while typing.
 
         // ---------- Boot ----------
-        setupEngine();
-        regenerate(true);
+  setupEngine();
+  regenerate(true);
+  updateControlsForMode();
   // Initialize audio state (volume/mute); background music will only start via the Play button
   applyAudioState();
       })();
