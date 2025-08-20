@@ -820,8 +820,8 @@
           app.avatarPool = AVATAR_FILES.slice(); app.avatarCache = new Map(); renderSelectedList();
           regenerate(true); setStatus('Cleared names');
         });
-  btnShake.addEventListener('click', () => { playRattle(); startMusic(); shake(); });
-  btnPick.addEventListener('click', () => { playRattle(); startMusic(); pickNext(); });
+  btnShake.addEventListener('click', () => { playRattle(); shake(); });
+  btnPick.addEventListener('click', () => { playRattle(); pickNext(); });
         btnReset.addEventListener('click', resetAll);
         btnContinue.addEventListener('click', continueAfterPick);
         btnUndo.addEventListener('click', undoLast);
@@ -846,9 +846,8 @@
         // ---------- Boot ----------
         setupEngine();
         regenerate(true);
-  // Try to start background music; if blocked, first interaction will start it
+  // Initialize audio state (volume/mute); background music will only start via the Play button
   applyAudioState();
-  startMusic(true);
       })();
     </script>
   </body>
